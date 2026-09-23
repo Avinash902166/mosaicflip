@@ -59,6 +59,15 @@ export class FaceDetector {
         this.stop();
       }
 
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+          this.onError('HTTPS required for camera over IP');
+          return false;
+        }
+        this.onError('Camera API not supported');
+        return false;
+      }
+
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 720 },
@@ -74,7 +83,16 @@ export class FaceDetector {
       this.startDetection();
       return true;
     } catch (err) {
-      this.onError('Camera access failed or denied');
+      console.error('Camera startup error:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        this.onError('Camera permission denied');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        this.onError('No webcam device found');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        this.onError('Camera in use by another app');
+      } else {
+        this.onError(err.message || 'Camera access failed');
+      }
       return false;
     }
   }

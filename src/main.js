@@ -3,6 +3,7 @@ import { Router } from './router.js';
 import { createStartView } from './startView.js';
 import { createVerticalView } from './verticalView.js';
 import { createHorizontalView } from './horizontalView.js';
+import { createUploadView } from './uploadView.js';
 
 const app = document.getElementById('app');
 let currentView = null;
@@ -23,7 +24,8 @@ const router = new Router({
   '/': () => render(window.innerWidth > window.innerHeight ? createHorizontalView(router) : createStartView(router)),
   '/start': () => render(createStartView(router)),
   '/vertical': () => render(createVerticalView(router)),
-  '/horizontal': () => render(createHorizontalView(router))
+  '/horizontal': () => render(createHorizontalView(router)),
+  '/upload': () => render(createUploadView(router))
 });
 
 router.init();

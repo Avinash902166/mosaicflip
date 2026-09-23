@@ -64,8 +64,15 @@ export function createStartView(router) {
         </button>
       </div>
 
-      <!-- Bottom Tagline -->
-      <div class="start-footer-tag">MAKE MEMORIES MAGICAL</div>
+      <!-- Bottom Tagline & Secondary Links -->
+      <div class="start-footer-tag">
+        MAKE MEMORIES MAGICAL
+        <div class="start-sub-actions">
+          <button class="sub-link-btn" id="btn-goto-upload">📁 Upload Photo</button>
+          <span class="sub-link-sep">•</span>
+          <button class="sub-link-btn" id="btn-goto-wall">📺 Mosaic Wall</button>
+        </div>
+      </div>
     </div>
   `;
 
@@ -73,6 +80,20 @@ export function createStartView(router) {
   if (btnStart) {
     btnStart.addEventListener('click', () => {
       router.navigate('/vertical');
+    });
+  }
+
+  const btnUpload = container.querySelector('#btn-goto-upload');
+  if (btnUpload) {
+    btnUpload.addEventListener('click', () => {
+      router.navigate('/upload');
+    });
+  }
+
+  const btnWall = container.querySelector('#btn-goto-wall');
+  if (btnWall) {
+    btnWall.addEventListener('click', () => {
+      router.navigate('/horizontal');
     });
   }
 

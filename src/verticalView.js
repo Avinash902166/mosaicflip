@@ -1,4 +1,5 @@
 import { FaceDetector } from './faceDetector.js';
+import { publishPhotoToFirebase } from './firebaseService.js';
 
 export function createVerticalView(router) {
   const container = document.createElement('div');
@@ -176,16 +177,29 @@ export function createVerticalView(router) {
     resetCapture();
   });
 
-  // OK Button: Confirms photo and opens the first page (Start Screen)
-  btnOk.addEventListener('click', () => {
+  // OK Button: Confirms photo and publishes to Firebase Realtime Database & Cloudinary
+  btnOk.addEventListener('click', async () => {
     if (!currentCapturedPhoto) return;
-    statusPill.textContent = '✓ Photo confirmed!';
-    router.broadcast({
-      type: 'PHOTO_APPROVED',
-      image: currentCapturedPhoto
-    });
-
+    const photoToSave = currentCapturedPhoto;
+    statusPill.textContent = '⚡ Uploading & Syncing...';
     btnOk.classList.add('btn-confirmed');
+
+    try {
+      // Direct push to Firebase (with Cloudinary cloud upload if online)
+      const finalUrl = await publishPhotoToFirebase(photoToSave);
+      router.broadcast({
+        type: 'PHOTO_APPROVED',
+        image: finalUrl
+      });
+      statusPill.textContent = '✓ Live Synced to Mosaic Wall!';
+    } catch (err) {
+      console.warn('Firebase publish failed, fallback to local broadcast:', err);
+      router.broadcast({
+        type: 'PHOTO_APPROVED',
+        image: photoToSave
+      });
+    }
+
     setTimeout(() => {
       btnOk.classList.remove('btn-confirmed');
       resetCapture();
@@ -261,8 +275,6 @@ export function createVerticalView(router) {
     const ok = await detector.startCamera(videoEl);
     if (ok) {
       statusPill.textContent = 'Camera active';
-    } else {
-      statusPill.textContent = 'Webcam not found (Use test buttons)';
     }
   };
 

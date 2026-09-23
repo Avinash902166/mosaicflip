@@ -2,6 +2,7 @@
 // Press 'F' to toggle Settings Icon. Click Settings Icon for Grid Customization.
 // Fullscreen (F11) cover-fills the screen with zero black space.
 // Approved photos appear BIG first, then fly, shrink, flip, and fit into a random grid slot.
+import { subscribeToFirebasePhotos, clearFirebasePhotos } from './firebaseService.js';
 
 export const GRID_PRESETS = {
   50: { label: '50', cols: 10, rows: 5, total: 50, gap: '4px', fontSize: 'clamp(11px, 1.3vw, 20px)' },
@@ -87,9 +88,16 @@ export function createHorizontalView(router) {
 
           <div class="settings-stats">
             <span>Filled Slots: <strong id="stat-photos-count">0</strong> / <strong id="stat-total-tiles">98</strong></span>
+            <span class="rtdb-status-pill">🟢 Firebase RTDB Live (No Polling)</span>
           </div>
 
           <div class="settings-actions-footer">
+            <button class="settings-action-btn" id="btn-modal-upload">
+              📁 Upload Photo
+            </button>
+            <button class="settings-action-btn" id="btn-modal-kiosk">
+              📸 Camera Kiosk
+            </button>
             <button class="settings-action-btn" id="btn-modal-fullscreen">
               📺 Fullscreen (F11)
             </button>
@@ -112,6 +120,8 @@ export function createHorizontalView(router) {
   const statTotal = container.querySelector('#stat-total-tiles');
   const btnModalFullscreen = container.querySelector('#btn-modal-fullscreen');
   const btnModalReset = container.querySelector('#btn-modal-reset');
+  const btnModalUpload = container.querySelector('#btn-modal-upload');
+  const btnModalKiosk = container.querySelector('#btn-modal-kiosk');
   const toastEl = container.querySelector('#mosaic-toast');
 
   let toastTimer = null;
@@ -344,6 +354,20 @@ export function createHorizontalView(router) {
     });
   });
 
+  if (btnModalUpload) {
+    btnModalUpload.addEventListener('click', () => {
+      closeModal();
+      router.navigate('/upload');
+    });
+  }
+
+  if (btnModalKiosk) {
+    btnModalKiosk.addEventListener('click', () => {
+      closeModal();
+      router.navigate('/vertical');
+    });
+  }
+
   btnModalFullscreen.addEventListener('click', () => {
     closeModal();
     if (!document.fullscreenElement) {
@@ -353,21 +377,64 @@ export function createHorizontalView(router) {
     }
   });
 
-  btnModalReset.addEventListener('click', () => {
-    if (confirm('Reset mosaic wall photos?')) {
+  btnModalReset.addEventListener('click', async () => {
+    if (confirm('Reset mosaic wall photos (Clears local & Firebase cloud)?')) {
       localStorage.removeItem('mosaic_photos');
       renderGrid();
       updateStats();
+      try {
+        await clearFirebasePhotos();
+        showToast('↺ Photos reset successfully!');
+      } catch (e) {
+        console.warn('Firebase clear error:', e);
+      }
     }
   });
 
   // Attach global keyboard listener
   window.addEventListener('keydown', handleKeyDown);
 
-  // Broadcast channel listener for real-time photo sync from vertical kiosk
+  // Set of recently animated photo URLs to prevent double animations from Broadcast + Firebase
+  const recentAnimatedUrls = new Set();
+  function triggerLivePhoto(url) {
+    if (!url) return;
+    if (recentAnimatedUrls.has(url)) return;
+    recentAnimatedUrls.add(url);
+    setTimeout(() => recentAnimatedUrls.delete(url), 10000);
+    addPhoto(url);
+  }
+
+  // Real-time Firebase Realtime Database Listener (Zero Polling, purely event-driven WebSocket)
+  const unsubscribeFirebase = subscribeToFirebasePhotos(
+    (newPhotoUrl) => {
+      // Real-time push from Firebase
+      triggerLivePhoto(newPhotoUrl);
+    },
+    (initialPhotos) => {
+      // Initial load of existing photos without re-animating
+      if (initialPhotos && initialPhotos.length > 0) {
+        const localPhotos = JSON.parse(localStorage.getItem('mosaic_photos') || '[]');
+        let updated = false;
+        initialPhotos.forEach((url, i) => {
+          recentAnimatedUrls.add(url);
+          if (i < activePreset.total && !localPhotos[i]) {
+            localPhotos[i] = url;
+            updated = true;
+          }
+        });
+        if (updated) {
+          localStorage.setItem('mosaic_photos', JSON.stringify(localPhotos));
+          renderGrid();
+          updateStats();
+        }
+      }
+    }
+  );
+
+  // Broadcast channel listener for instant local window sync
   router.onBroadcast((data) => {
     if (data.type === 'PHOTO_APPROVED' && data.image) {
-      addPhoto(data.image);
+      triggerLivePhoto(data.image);
     }
   });
 
@@ -375,6 +442,9 @@ export function createHorizontalView(router) {
   container.stop = () => {
     window.removeEventListener('keydown', handleKeyDown);
     clearTimeout(toastTimer);
+    if (typeof unsubscribeFirebase === 'function') {
+      unsubscribeFirebase();
+    }
   };
 
   // Initial setup
